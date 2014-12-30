@@ -1,5 +1,5 @@
 <?php
-class PHPCodeSnifferFileUnitTestFileForFunctionDocComment {
+class PHPCodeSnifferFileUnitTestFileForFunctionComment {
 
 	/**
 	 * A simple function comment.
@@ -160,7 +160,7 @@ function tagBeforeComment() {
 
 
 /**
- * no return tag
+ * No return tag
  *
  *
  *
@@ -260,4 +260,21 @@ class YourClass {
 
 	}
 }
-?>
+
+/**
+ * Test function.
+ *
+ * @see
+ */
+function myFunction() {
+
+}
+
+/**
+ * Test function.
+ *
+ * @see Non empty @see
+ */
+function myFunction() {
+
+}
