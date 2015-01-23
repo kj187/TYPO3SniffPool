@@ -21,13 +21,13 @@ class PHPCodeSnifferFileUnitTestFileForFunctionDocComment {
 	 *
 	 * long desc here
 	 *
-	 * @param int $stackPt  The position in @ @unknown the stack of the token that opened the scope
-	 * @param int $detph    How many scope levels down we are.
-	 * @param int $index    The index.
+	 * @param integer $stackPt  The position in @ @unknown the stack of the token that opened the scope
+	 * @param boolean $detph    How many scope levels down we are.
+	 * @param array $index    The index.
 	 * @return
 	 * @throws
 	 */
-	private function foo($stackPtr, $depth=1, $index) {
+	private function foo($stackPtr, $depth=1, array $index) {
 		return $stackPtr;
 	}
 
