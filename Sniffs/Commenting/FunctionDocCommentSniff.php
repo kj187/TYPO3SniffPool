@@ -199,8 +199,7 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
         $tokens = $phpcsFile->getTokens();
 
         $params  = array();
-        $maxType = 0;
-        $maxVar  = 0;
+        $spaces  = 1;
 
         foreach ($tokens[$commentStart]['comment_tags'] as $pos => $tag) {
             if ($tokens[$tag]['content'] !== '@param') {
@@ -220,17 +219,9 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
                 $typeLen   = strlen($matches[1]);
                 $type      = trim($matches[1]);
                 $typeSpace = ($typeLen - strlen($type));
-                $typeLen   = strlen($type);
-                if ($typeLen > $maxType) {
-                    $maxType = $typeLen;
-                }
 
                 if (isset($matches[2]) === true) {
-                    $var    = $matches[2];
-                    $varLen = strlen($var);
-                    if ($varLen > $maxVar) {
-                        $maxVar = $varLen;
-                    }
+                    $var = $matches[2];
 
                     if (isset($matches[4]) === true) {
                         $varSpace       = strlen($matches[3]);
@@ -371,16 +362,11 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
             $foundParams[] = $param['var'];
 
             // Check number of spaces after the type.
-            // TODO: Only one space is needed after @param
-            $spaces = ($maxType - strlen($param['type']) + 1);
-            if ($param['type_space'] !== $spaces) {
-                $error = 'Expected %s spaces after parameter type; %s found';
-                $data  = array(
-                          $spaces,
-                          $param['type_space'],
-                         );
+            if ($param['type_space'] > 1) {
+                $error = 'Expected 1 space after parameter type; %s found';
+                $data  = array($param['type_space']);
 
-                $fix = $phpcsFile->addFixableError($error, $param['tag'], 'SpacingAfterParamType', $data);
+                $fix = $phpcsFile->addFixableWarning($error, $param['tag'], 'SpacingAfterParamType', $data);
                 if ($fix === true) {
                     $phpcsFile->fixer->beginChangeset();
 
@@ -441,15 +427,10 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
             }
 
             // Check number of spaces after the var name.
-            $spaces = ($maxVar - strlen($param['var']) + 1);
-            if ($param['var_space'] !== $spaces) {
-                $error = 'Expected %s spaces after parameter name; %s found';
-                $data  = array(
-                          $spaces,
-                          $param['var_space'],
-                         );
-
-                $fix = $phpcsFile->addFixableError($error, $param['tag'], 'SpacingAfterParamName', $data);
+            if ($param['var_space'] > 1) {
+                $error = 'Expected 1 space after parameter name; %s found';
+                $data  = array($param['var_space']);
+                $fix = $phpcsFile->addFixableWarning($error, $param['tag'], 'SpacingAfterParamName', $data);
                 if ($fix === true) {
                     $phpcsFile->fixer->beginChangeset();
 
