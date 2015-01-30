@@ -127,7 +127,8 @@ class PHPCodeSnifferFileUnitTestFileForFunctionDocComment {
 	 * @param   int			$one	parameter comment must start with capital letter.
 	 * @param	int         $two	Comment.
 	 * @param	string		$three	Comment.
-	 * @param	array		$four	Comment.
+	 * @param	array		$four   Comment.
+	 * @param	array		$five	Comment.
 	 * @param	array		$five	Comment.
 	 * @return	void
 	 */
@@ -254,6 +255,7 @@ class YourClass {
 	 * @param	int	Comment
 	 * @param	int
 	 * @param	missing
+	 * @param   bla
 	 * @param
 	 *
 	 * @return void

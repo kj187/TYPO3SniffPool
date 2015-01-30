@@ -50,9 +50,6 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
     // TODO: Copy the processThrows here too
     // @throws dont need a comment
 
-    // TODO: Copy the processReturn here too
-    // return type need to be in short form int instead of integer
-
     protected static $allowedTypes = array(
                                       'array',
                                       'bool',
@@ -206,26 +203,34 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
                 continue;
             }
 
-            $type         = '';
-            $typeSpace    = 0;
-            $var          = '';
-            $varSpace     = 0;
-            $comment      = '';
-            $commentLines = array();
+            $paramSpace           = 0;
+            $type                 = '';
+            $typeSpace            = 0;
+            $isVarIntendByTab     = FALSE;
+            $var                  = '';
+            $varSpace             = 0;
+            $isCommentIndentByTab = FALSE;
+            $comment              = '';
+            $commentLines         = array();
             if ($tokens[($tag + 2)]['code'] === T_DOC_COMMENT_STRING) {
                 $matches = array();
                 preg_match('/([^$&]+)(?:((?:\$|&)[^\s]+)(?:(\s+)(.*))?)?/', $tokens[($tag + 2)]['content'], $matches);
 
-                $typeLen   = strlen($matches[1]);
-                $type      = trim($matches[1]);
-                $typeSpace = ($typeLen - strlen($type));
+                $paramSpaceToken = $phpcsFile->findNext(T_DOC_COMMENT_WHITESPACE, $tag, $tag + 2);
+                $isTypeIndentByTab       = $this->isTabUsedToIntend($tokens[$paramSpaceToken]['content']);
+                $paramSpace              = strlen($tokens[$paramSpaceToken]['content']);
+                $typeLen                 = strlen($matches[1]);
+                $type                    = trim($matches[1]);
+                $typeSpace               = ($typeLen - strlen($type));
+                $isVarIntendByTab        = $this->isTabUsedToIntend($matches[1]);
 
                 if (isset($matches[2]) === true) {
                     $var = $matches[2];
 
                     if (isset($matches[4]) === true) {
-                        $varSpace       = strlen($matches[3]);
-                        $comment        = $matches[4];
+                        $varSpace             = strlen($matches[3]);
+                        $isCommentIndentByTab = $this->isTabUsedToIntend($matches[3]);
+                        $comment              = $matches[4];
                         $commentLines[] = array(
                                            'comment' => $comment,
                                            'token'   => ($tag + 2),
@@ -269,13 +274,18 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
             }//end if
 
             $params[] = array(
-                         'tag'          => $tag,
-                         'type'         => $type,
-                         'var'          => $var,
-                         'comment'      => $comment,
-                         'commentLines' => $commentLines,
-                         'type_space'   => $typeSpace,
-                         'var_space'    => $varSpace,
+                         'tag'                => $tag,
+                         'type'               => $type,
+                         'var'                => $var,
+                         'comment'            => $comment,
+                         'commentLines'       => $commentLines,
+                         'param_space'        => $paramSpace,
+                         'type_tab_indent'    => $isTypeIndentByTab,
+                         'type_space_token'   => $paramSpaceToken,
+                         'type_space'         => $typeSpace,
+                         'var_tab_indent'     => $isVarIntendByTab,
+                         'var_space'          => $varSpace,
+                         'comment_tab_indent' => $isCommentIndentByTab,
                         );
         }//end foreach
 
@@ -355,11 +365,41 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
                 }//end if
             }//end foreach
 
+            // Make sure that there are only spaces used to intend the var type.
+            if ($param['type_tab_indent'] === true) {
+                $error = 'Spaces must be used to indent variable type. Tabs found.';
+                $fix = $phpcsFile->addFixableError($error, $param['tag'], 'TabIndentVariableType');
+
+                if ($fix === true) {
+                    $phpcsFile->fixer->replaceToken($param['type_space_token'], str_repeat(' ', $spaces));
+                }
+            }
+
+            // Check number of spaces before the type.
+            if ($param['param_space'] > 1) {
+                $error = 'Expected 1 space before parameter type; %s found';
+                $data = array($param['param_space']);
+                $fix = $phpcsFile->addFixableWarning($error, $param['tag'], 'SpacingBeforeParamType', $data);
+                if ($fix === true) {
+                    $phpcsFile->fixer->replaceToken($param['type_space_token'], str_repeat(' ', $spaces));
+                }
+            }
+
             if ($param['var'] === '') {
                 continue;
             }
 
             $foundParams[] = $param['var'];
+
+            // Make sure that there are only spaces used to intend the var name.
+            if ($param['var_tab_indent']) {
+                $error = 'Spaces must be used to indent the variable name. Tabs found.';
+                $fix = $phpcsFile->addFixableError($error, $param['tag'], 'TabIndentVariableName');
+
+                if ($fix === true) {
+                    $this->rewriteSpaceAfterVariableType($phpcsFile, $param, $spaces);
+                }
+            }
 
             // Check number of spaces after the type.
             if ($param['type_space'] > 1) {
@@ -368,31 +408,7 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
 
                 $fix = $phpcsFile->addFixableWarning($error, $param['tag'], 'SpacingAfterParamType', $data);
                 if ($fix === true) {
-                    $phpcsFile->fixer->beginChangeset();
-
-                    $content  = $param['type'];
-                    $content .= str_repeat(' ', $spaces);
-                    $content .= $param['var'];
-                    $content .= str_repeat(' ', $param['var_space']);
-                    $content .= $param['commentLines'][0]['comment'];
-                    $phpcsFile->fixer->replaceToken(($param['tag'] + 2), $content);
-
-                    // Fix up the indent of additional comment lines.
-                    foreach ($param['commentLines'] as $lineNum => $line) {
-                        if ($lineNum === 0
-                            || $param['commentLines'][$lineNum]['indent'] === 0
-                        ) {
-                            continue;
-                        }
-
-                        $newIndent = ($param['commentLines'][$lineNum]['indent'] + $spaces - $param['type_space']);
-                        $phpcsFile->fixer->replaceToken(
-                            ($param['commentLines'][$lineNum]['token'] - 1),
-                            str_repeat(' ', $newIndent)
-                        );
-                    }
-
-                    $phpcsFile->fixer->endChangeset();
+                    $this->rewriteSpaceAfterVariableType($phpcsFile, $param, $spaces);
                 }//end if
             }//end if
 
@@ -426,39 +442,24 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
                 continue;
             }
 
+            // Make sure that there are only spaces used to intend the var comment.
+            if ($param['comment_tab_indent']) {
+                $error = 'Spaces must be used to indent comment. Tabs found.';
+                $fix = $phpcsFile->addFixableError($error, $param['tag'], 'TabIndentVariableComment');
+                if ($fix === true) {
+                    $this->rewriteSpaceAfterVariableName($phpcsFile, $param, $spaces);
+                }
+            }
+
             // Check number of spaces after the var name.
             if ($param['var_space'] > 1) {
                 $error = 'Expected 1 space after parameter name; %s found';
                 $data  = array($param['var_space']);
                 $fix = $phpcsFile->addFixableWarning($error, $param['tag'], 'SpacingAfterParamName', $data);
                 if ($fix === true) {
-                    $phpcsFile->fixer->beginChangeset();
-
-                    $content  = $param['type'];
-                    $content .= str_repeat(' ', $param['type_space']);
-                    $content .= $param['var'];
-                    $content .= str_repeat(' ', $spaces);
-                    $content .= $param['commentLines'][0]['comment'];
-                    $phpcsFile->fixer->replaceToken(($param['tag'] + 2), $content);
-
-                    // Fix up the indent of additional comment lines.
-                    foreach ($param['commentLines'] as $lineNum => $line) {
-                        if ($lineNum === 0
-                            || $param['commentLines'][$lineNum]['indent'] === 0
-                        ) {
-                            continue;
-                        }
-
-                        $newIndent = ($param['commentLines'][$lineNum]['indent'] + $spaces - $param['var_space']);
-                        $phpcsFile->fixer->replaceToken(
-                            ($param['commentLines'][$lineNum]['token'] - 1),
-                            str_repeat(' ', $newIndent)
-                        );
-                    }
-
-                    $phpcsFile->fixer->endChangeset();
-                }//end if
-            }//end if
+                    $this->rewriteSpaceAfterVariableName($phpcsFile, $param, $spaces);
+                }
+            }
 
             // Param comments must start with a capital letter and end with the full stop.
             $firstChar = $param['comment']{0};
@@ -494,87 +495,6 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
 //                $errorPos = ($params[$lastParm]->getLine() + $commentStart);
 //                $this->currentFile->addError($error, $errorPos, 'SpacingAfterParams');
 //            }
-//            // Parameters must appear immediately after the comment.
-//            if ($params[0]->getOrder() !== 2) {
-//                $error = 'Parameters must appear immediately after the comment';
-//                $errorPos = ($params[0]->getLine() + $commentStart);
-//                $this->currentFile->addError($error, $errorPos, 'SpacingBeforeParams');
-//            }
-//            $previousParam = null;
-//            foreach ($params as $param) {
-//                $errorPos = ($param->getLine() + $commentStart);
-//
-//                // Make sure they are in the correct order,
-//                // and have the correct name.
-//                $pos = $param->getPosition();
-//                $paramName = ($param->getVarName() !== '') ? $param->getVarName() : '[ UNKNOWN ]';
-//                // Make sure the names of the parameter comment matches the
-//                // actual parameter.
-//                if (isset($realParams[($pos - 1) ]) === true) {
-//                    // Make sure that there are only tabs used to intend the var type.
-//                    if ($this->isTabUsedToIntend($param->getWhitespaceBeforeType())) {
-//                        $error = 'Spaces must be used to indent the variable type; tabs are not allowed';
-//                        $this->currentFile->addError($error, $errorPos, 'SpacingBeforeParamType');
-//                    }
-//                    // Make sure that there are only tabs used to intend the var comment.
-//                    if ($this->isTabUsedToIntend($param->getWhiteSpaceBeforeComment())) {
-//                        $error = 'Spaces must be used to indent the variable comment; tabs are not allowed';
-//                        $this->currentFile->addError($error, $errorPos, 'SpacingBeforeParamComment');
-//                    }
-//                    // Make sure that there are only tabs used to intend the var name.
-//                    if ($param->getVarName() && $this->isTabUsedToIntend($param->getWhiteSpaceBeforeVarName())) {
-//                        $error = 'Spaces must be used to indent the variable name; tabs are not allowed';
-//                        $this->currentFile->addError($error, $errorPos, 'SpacingBeforeParamName');
-//                    }
-//
-//                    $realName = $realParams[($pos - 1) ]['name'];
-//                    $foundParams[] = $realName;
-//                    // Append ampersand to name if passing by reference.
-//                    if ($realParams[($pos - 1) ]['pass_by_reference'] === true) {
-//                        $realName = '&' . $realName;
-//                    }
-//                    if ($realName !== $paramName) {
-//                        $code = 'ParamNameNoMatch';
-//                        $data = array($paramName, $realName, $pos,);
-//                        $error = 'Doc comment for var %s does not match ';
-//                        if (strtolower($paramName) === strtolower($realName)) {
-//                            $error.= 'case of ';
-//                            $code = 'ParamNameNoCaseMatch';
-//                        }
-//                        $error.= 'actual variable name %s at position %s';
-//                        $this->currentFile->addError($error, $errorPos, $code, $data);
-//                    }
-//                } else {
-//                    // Throw an error if we found a parameter in comment but not in the parameter list of the function
-//                    $error = 'The paramter "' . $paramName . '" at position ' . $pos . ' is superfluous, because this parameter was not found in parameter list.';
-//                    $this->currentFile->addError($error, $errorPos, 'SuperFluous.ParamComment');
-//                }
-//                if ($param->getVarName() === '') {
-//                    $error = 'Missing parameter name at position ' . $pos;
-//                    $this->currentFile->addError($error, $errorPos, 'MissingParamName');
-//                }
-//                if ($param->getType() === '') {
-//                    $error = 'Missing type at position ' . $pos;
-//                    $this->currentFile->addError($error, $errorPos, 'MissingParamType');
-//                }
-//            }
-//        }
-//        $realNames = array();
-//        foreach ($realParams as $realParam) {
-//            $realNames[] = $realParam['name'];
-//        }
-        // Report and missing comments.
-//        $diff = array_diff($realNames, $foundParams);
-//        foreach ($diff as $neededParam) {
-//            if (count($params) !== 0) {
-//                $errorPos = ($params[(count($params) - 1) ]->getLine() + $commentStart);
-//            } else {
-//                $errorPos = $commentStart;
-//            }
-//            $error = 'Doc comment for "%s" missing';
-//            $data = array($neededParam);
-//            $this->currentFile->addError($error, $errorPos, 'MissingParamTag', $data);
-//        }
     }
 
     /**
@@ -658,4 +578,79 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
         }//end if
 
     }//end suggestType()
+
+    /**
+     * @param \PHP_CodeSniffer_File $phpcsFile
+     * @param array                 $param
+     * @param integer               $spaces
+     *
+     * @return array
+     */
+    protected function rewriteSpaceAfterVariableType(PHP_CodeSniffer_File $phpcsFile, $param, $spaces)
+    {
+        $phpcsFile->fixer->beginChangeset();
+
+        $spaceContent = $param['comment_tab_indent'] ? "\t" : ' ';
+
+        $content = $param['type'];
+        $content .= str_repeat(' ', $spaces);
+        $content .= $param['var'];
+        $content .= str_repeat($spaceContent, $param['var_space']);
+        $content .= $param['commentLines'][0]['comment'];
+        $phpcsFile->fixer->replaceToken(($param['tag'] + 2), $content);
+
+        // Fix up the indent of additional comment lines.
+        foreach ($param['commentLines'] as $lineNum => $line) {
+            if ($lineNum === 0
+                || $param['commentLines'][$lineNum]['indent'] === 0
+            ) {
+                continue;
+            }
+
+            $newIndent = ($param['commentLines'][$lineNum]['indent'] + $spaces
+                - $param['type_space']);
+            $phpcsFile->fixer->replaceToken(
+                ($param['commentLines'][$lineNum]['token'] - 1),
+                str_repeat(' ', $newIndent)
+            );
+        }
+
+        $phpcsFile->fixer->endChangeset();
+    }//end rewriteSpaceAfterVariableType()
+
+    /**
+     * @param \PHP_CodeSniffer_File $phpcsFile
+     * @param array                 $param
+     * @param integer               $spaces
+     */
+    public function rewriteSpaceAfterVariableName(PHP_CodeSniffer_File $phpcsFile, $param, $spaces)
+    {
+        $phpcsFile->fixer->beginChangeset();
+
+        $spaceContent = $param['var_tab_indent'] ? "\t" : ' ';
+
+        $content  = $param['type'];
+        $content .= str_repeat($spaceContent, $param['type_space']);
+        $content .= $param['var'];
+        $content .= str_repeat(' ', $spaces);
+        $content .= $param['commentLines'][0]['comment'];
+        $phpcsFile->fixer->replaceToken(($param['tag'] + 2), $content);
+
+        // Fix up the indent of additional comment lines.
+        foreach ($param['commentLines'] as $lineNum => $line) {
+            if ($lineNum === 0
+                || $param['commentLines'][$lineNum]['indent'] === 0
+            ) {
+                continue;
+            }
+
+            $newIndent = ($param['commentLines'][$lineNum]['indent'] + $spaces - $param['var_space']);
+            $phpcsFile->fixer->replaceToken(
+                ($param['commentLines'][$lineNum]['token'] - 1),
+                str_repeat(' ', $newIndent)
+            );
+        }
+
+        $phpcsFile->fixer->endChangeset();
+    }//end rewriteSpaceAfterVariableName()
 }
