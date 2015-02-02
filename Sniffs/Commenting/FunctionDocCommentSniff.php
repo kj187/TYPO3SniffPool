@@ -61,6 +61,7 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
                                       'resource',
                                       'callable',
                                      );
+    protected $spaces = 1;
 
     /**
      * Process the return comment of this function comment.
@@ -103,6 +104,33 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
                 $error = 'Return type missing for @return tag in function comment';
                 $phpcsFile->addError($error, $return, 'MissingReturnType');
             } else {
+                if ($tokens[($return + 1)]['code'] === T_DOC_COMMENT_WHITESPACE) {
+                    if ($this->isTabUsedToIntend($tokens[($return + 1)]['content']) === true) {
+                        $error = 'Only spaces are allowed between @return and type; tabs found';
+
+                        $fix = $phpcsFile->addFixableError($error, $return, 'ReturnSpacingTab');
+
+                        if ($fix === true) {
+                            $phpcsFile->fixer->replaceToken(($return + 1), str_repeat(' ', $this->spaces));
+                        }
+                    }
+
+                    $spaceLength = strlen($tokens[($return + 1)]['content']);
+                    if ($spaceLength > $this->spaces) {
+                        $error = 'Only %s space allowed between @return and type; % spaces found';
+                        $data = array(
+                            $this->spaces,
+                            $spaceLength
+                        );
+
+                        $fix = $phpcsFile->addFixableError($error, $return, 'ReturnSpacing', $data);
+
+                        if ($fix === true) {
+                            $phpcsFile->fixer->replaceToken(($return + 1), str_repeat(' ', $this->spaces));
+                        }
+                    }
+                }
+
                 // Check return type (can be multiple, separated by '|').
                 $typeNames      = explode('|', $content);
                 $suggestedNames = array();
@@ -170,6 +198,8 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
                         }
                     }
                 }//end if
+
+
             }//end if
         } else {
             $error = 'Missing @return tag in function comment';
@@ -196,7 +226,6 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
         $tokens = $phpcsFile->getTokens();
 
         $params  = array();
-        $spaces  = 1;
 
         foreach ($tokens[$commentStart]['comment_tags'] as $pos => $tag) {
             if ($tokens[$tag]['content'] !== '@param') {
@@ -371,7 +400,7 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
                 $fix = $phpcsFile->addFixableError($error, $param['tag'], 'TabIndentVariableType');
 
                 if ($fix === true) {
-                    $phpcsFile->fixer->replaceToken($param['type_space_token'], str_repeat(' ', $spaces));
+                    $phpcsFile->fixer->replaceToken($param['type_space_token'], str_repeat(' ', $this->spaces));
                 }
             }
 
@@ -381,7 +410,7 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
                 $data = array($param['param_space']);
                 $fix = $phpcsFile->addFixableWarning($error, $param['tag'], 'SpacingBeforeParamType', $data);
                 if ($fix === true) {
-                    $phpcsFile->fixer->replaceToken($param['type_space_token'], str_repeat(' ', $spaces));
+                    $phpcsFile->fixer->replaceToken($param['type_space_token'], str_repeat(' ', $this->spaces));
                 }
             }
 
@@ -397,7 +426,7 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
                 $fix = $phpcsFile->addFixableError($error, $param['tag'], 'TabIndentVariableName');
 
                 if ($fix === true) {
-                    $this->rewriteSpaceAfterVariableType($phpcsFile, $param, $spaces);
+                    $this->rewriteSpaceAfterVariableType($phpcsFile, $param, $this->spaces);
                 }
             }
 
@@ -408,7 +437,7 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
 
                 $fix = $phpcsFile->addFixableWarning($error, $param['tag'], 'SpacingAfterParamType', $data);
                 if ($fix === true) {
-                    $this->rewriteSpaceAfterVariableType($phpcsFile, $param, $spaces);
+                    $this->rewriteSpaceAfterVariableType($phpcsFile, $param, $this->spaces);
                 }//end if
             }//end if
 
@@ -447,7 +476,7 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
                 $error = 'Spaces must be used to indent comment. Tabs found.';
                 $fix = $phpcsFile->addFixableError($error, $param['tag'], 'TabIndentVariableComment');
                 if ($fix === true) {
-                    $this->rewriteSpaceAfterVariableName($phpcsFile, $param, $spaces);
+                    $this->rewriteSpaceAfterVariableName($phpcsFile, $param, $this->spaces);
                 }
             }
 
@@ -457,7 +486,7 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
                 $data  = array($param['var_space']);
                 $fix = $phpcsFile->addFixableWarning($error, $param['tag'], 'SpacingAfterParamName', $data);
                 if ($fix === true) {
-                    $this->rewriteSpaceAfterVariableName($phpcsFile, $param, $spaces);
+                    $this->rewriteSpaceAfterVariableName($phpcsFile, $param, $this->spaces);
                 }
             }
 
@@ -481,14 +510,6 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
             $data  = array($neededParam);
             $phpcsFile->addError($error, $commentStart, 'MissingParamTag', $data);
         }
-
-//        if (empty($params) === false) {
-//            $lastParm = (count($params) - 1);
-//            if (substr_count($params[$lastParm]->getWhitespaceAfter(), $this->currentFile->eolChar) !== 1) {
-//                $error = 'Last parameter comment must not a blank newline after it';
-//                $errorPos = ($params[$lastParm]->getLine() + $commentStart);
-//                $this->currentFile->addError($error, $errorPos, 'SpacingAfterParams');
-//            }
     }
 
     /**

@@ -50,7 +50,7 @@ class PHPCodeSnifferFileUnitTestFileForFunctionDocComment {
 	 * Long description with extra blank line before and after
 	 *
 	 *
-	 * @return void
+	 * @return     void
 	 */
 	public function extraDescriptionNewlines() {
 
