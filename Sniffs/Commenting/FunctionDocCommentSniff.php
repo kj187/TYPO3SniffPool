@@ -467,12 +467,6 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
                 $error = 'Parameter comment must start with a capital letter';
                 $phpcsFile->addError($error, $param['tag'], 'ParamCommentNotCapital');
             }
-
-            $lastChar = substr($param['comment'], -1);
-            if ($lastChar !== '.') {
-                $error = 'Parameter comment should end with a full stop';
-                $phpcsFile->addWarning($error, $param['tag'], 'ParamCommentFullStop');
-            }
         }//end foreach
 
         $realNames = array();
