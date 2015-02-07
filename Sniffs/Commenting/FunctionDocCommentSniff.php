@@ -101,33 +101,6 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
                 $error = 'Return type missing for @return tag in function comment';
                 $phpcsFile->addError($error, $return, 'MissingReturnType');
             } else {
-                if ($tokens[($return + 1)]['code'] === T_DOC_COMMENT_WHITESPACE) {
-                    if ($this->isTabUsedToIntend($tokens[($return + 1)]['content']) === true) {
-                        $error = 'Only spaces are allowed between @return and type; tabs found';
-
-                        $fix = $phpcsFile->addFixableError($error, $return, 'ReturnSpacingTab');
-
-                        if ($fix === true) {
-                            $phpcsFile->fixer->replaceToken(($return + 1), str_repeat(' ', $this->spaces));
-                        }
-                    }
-
-                    $spaceLength = strlen($tokens[($return + 1)]['content']);
-                    if ($spaceLength > $this->spaces) {
-                        $error = 'Only %s space allowed between @return and type; % spaces found';
-                        $data = array(
-                            $this->spaces,
-                            $spaceLength
-                        );
-
-                        $fix = $phpcsFile->addFixableError($error, $return, 'ReturnSpacing', $data);
-
-                        if ($fix === true) {
-                            $phpcsFile->fixer->replaceToken(($return + 1), str_repeat(' ', $this->spaces));
-                        }
-                    }
-                }
-
                 // Check return type (can be multiple, separated by '|').
                 $typeNames      = explode('|', $content);
                 $suggestedNames = array();
@@ -290,7 +263,6 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
                 continue;
             }
 
-            $paramSpace           = 0;
             $type                 = '';
             $typeSpace            = 0;
             $isVarIntendByTab     = FALSE;
@@ -303,9 +275,6 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
                 $matches = array();
                 preg_match('/([^$&]+)(?:((?:\$|&)[^\s]+)(?:(\s+)(.*))?)?/', $tokens[($tag + 2)]['content'], $matches);
 
-                $paramSpaceToken = $phpcsFile->findNext(T_DOC_COMMENT_WHITESPACE, $tag, $tag + 2);
-                $isTypeIndentByTab       = $this->isTabUsedToIntend($tokens[$paramSpaceToken]['content']);
-                $paramSpace              = strlen($tokens[$paramSpaceToken]['content']);
                 $typeLen                 = strlen($matches[1]);
                 $type                    = trim($matches[1]);
                 $typeSpace               = ($typeLen - strlen($type));
@@ -366,9 +335,6 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
                          'var'                => $var,
                          'comment'            => $comment,
                          'commentLines'       => $commentLines,
-                         'param_space'        => $paramSpace,
-                         'type_tab_indent'    => $isTypeIndentByTab,
-                         'type_space_token'   => $paramSpaceToken,
                          'type_space'         => $typeSpace,
                          'var_tab_indent'     => $isVarIntendByTab,
                          'var_space'          => $varSpace,
@@ -452,52 +418,11 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
                 }//end if
             }//end foreach
 
-            // Make sure that there are only spaces used to intend the var type.
-            if ($param['type_tab_indent'] === true) {
-                $error = 'Spaces must be used to indent variable type. Tabs found.';
-                $fix = $phpcsFile->addFixableError($error, $param['tag'], 'TabIndentVariableType');
-
-                if ($fix === true) {
-                    $phpcsFile->fixer->replaceToken($param['type_space_token'], str_repeat(' ', $this->spaces));
-                }
-            }
-
-            // Check number of spaces before the type.
-            if ($param['param_space'] > 1) {
-                $error = 'Expected 1 space before parameter type; %s found';
-                $data = array($param['param_space']);
-                $fix = $phpcsFile->addFixableWarning($error, $param['tag'], 'SpacingBeforeParamType', $data);
-                if ($fix === true) {
-                    $phpcsFile->fixer->replaceToken($param['type_space_token'], str_repeat(' ', $this->spaces));
-                }
-            }
-
             if ($param['var'] === '') {
                 continue;
             }
 
             $foundParams[] = $param['var'];
-
-            // Make sure that there are only spaces used to intend the var name.
-            if ($param['var_tab_indent']) {
-                $error = 'Spaces must be used to indent the variable name. Tabs found.';
-                $fix = $phpcsFile->addFixableError($error, $param['tag'], 'TabIndentVariableName');
-
-                if ($fix === true) {
-                    $this->rewriteSpaceAfterVariableType($phpcsFile, $param, $this->spaces);
-                }
-            }
-
-            // Check number of spaces after the type.
-            if ($param['type_space'] > 1) {
-                $error = 'Expected 1 space after parameter type; %s found';
-                $data  = array($param['type_space']);
-
-                $fix = $phpcsFile->addFixableWarning($error, $param['tag'], 'SpacingAfterParamType', $data);
-                if ($fix === true) {
-                    $this->rewriteSpaceAfterVariableType($phpcsFile, $param, $this->spaces);
-                }//end if
-            }//end if
 
             // Make sure the param name is correct.
             if (isset($realParams[$pos]) === true) {
@@ -527,25 +452,6 @@ class TYPO3SniffPool_Sniffs_Commenting_FunctionDocCommentSniff extends Squiz_Sni
 
             if ($param['comment'] === '') {
                 continue;
-            }
-
-            // Make sure that there are only spaces used to intend the var comment.
-            if ($param['comment_tab_indent']) {
-                $error = 'Spaces must be used to indent comment. Tabs found.';
-                $fix = $phpcsFile->addFixableError($error, $param['tag'], 'TabIndentVariableComment');
-                if ($fix === true) {
-                    $this->rewriteSpaceAfterVariableName($phpcsFile, $param, $this->spaces);
-                }
-            }
-
-            // Check number of spaces after the var name.
-            if ($param['var_space'] > 1) {
-                $error = 'Expected 1 space after parameter name; %s found';
-                $data  = array($param['var_space']);
-                $fix = $phpcsFile->addFixableWarning($error, $param['tag'], 'SpacingAfterParamName', $data);
-                if ($fix === true) {
-                    $this->rewriteSpaceAfterVariableName($phpcsFile, $param, $this->spaces);
-                }
             }
 
             // Param comments must start with a capital letter and end with the full stop.
